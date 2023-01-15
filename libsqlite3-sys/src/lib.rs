@@ -5,8 +5,8 @@
 #[cfg(feature = "bundled-sqlcipher-vendored-openssl")]
 extern crate openssl_sys;
 
-#[cfg(all(windows, feature = "winsqlite3", target_pointer_width = "32"))]
-compile_error!("The `libsqlite3-sys/winsqlite3` feature is not supported on 32 bit targets.");
+#[cfg(all(target_os = "windows", target_arch = "i686"))]
+compile_error!("The `libsqlite3-sys/winsqlite3` feature is not supported on x86 targets.");
 
 pub use self::error::*;
 
