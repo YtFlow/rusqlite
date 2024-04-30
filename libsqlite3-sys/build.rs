@@ -332,6 +332,8 @@ fn env_prefix() -> &'static str {
 fn lib_name() -> &'static str {
     if cfg!(any(feature = "sqlcipher", feature = "bundled-sqlcipher")) {
         "sqlcipher"
+    } else if cfg!(all(windows, feature = "winsqlite3")) {
+        "winsqlite3"
     } else {
         "sqlite3"
     }
@@ -432,6 +434,12 @@ mod build_linked {
         #[cfg(not(feature = "loadable_extension"))]
         println!("cargo:link-target={link_lib}");
 
+        if win_target() && cfg!(feature = "winsqlite3") {
+            #[cfg(not(feature = "loadable_extension"))]
+            println!("cargo:rustc-link-lib=dylib={link_lib}");
+            return HeaderLocation::Wrapper;
+        }
+
         // Allow users to specify where to find SQLite.
         if let Ok(dir) = env::var(format!("{}_LIB_DIR", env_prefix())) {
             // Try to use pkg-config to determine link commands
@@ -493,7 +501,7 @@ mod bindings {
 
     use std::path::Path;
 
-    static PREBUILT_BINDGENS: &[&str] = &["bindgen_3.14.0"];
+    static PREBUILT_BINDGENS: &[&str] = &["bindgen_3.29.0"];
 
     pub fn write_to_out_dir(_header: HeaderLocation, out_path: &Path) {
         let name = PREBUILT_BINDGENS[PREBUILT_BINDGENS.len() - 1];
@@ -507,6 +515,9 @@ mod bindings {
     use bindgen::callbacks::{IntKind, ParseCallbacks};
 
     use std::path::Path;
+
+    use super::win_target;
+
     #[derive(Debug)]
     struct SqliteTypeChooser;
 
@@ -549,10 +560,10 @@ mod bindings {
             bindings = bindings
                 .blocklist_function("sqlite3_auto_extension")
                 .raw_line(
-                    r#"extern "C" {
+                    r#"extern "system" {
     pub fn sqlite3_auto_extension(
         xEntryPoint: ::std::option::Option<
-            unsafe extern "C" fn(
+            unsafe extern "system" fn(
                 db: *mut sqlite3,
                 pzErrMsg: *mut *mut ::std::os::raw::c_char,
                 _: *const sqlite3_api_routines,
@@ -563,10 +574,10 @@ mod bindings {
                 )
                 .blocklist_function("sqlite3_cancel_auto_extension")
                 .raw_line(
-                    r#"extern "C" {
+                    r#"extern "system" {
     pub fn sqlite3_cancel_auto_extension(
         xEntryPoint: ::std::option::Option<
-            unsafe extern "C" fn(
+            unsafe extern "system" fn(
                 db: *mut sqlite3,
                 pzErrMsg: *mut *mut ::std::os::raw::c_char,
                 _: *const sqlite3_api_routines,
@@ -594,6 +605,37 @@ mod bindings {
         }
         if cfg!(feature = "session") {
             bindings = bindings.clang_arg("-DSQLITE_ENABLE_SESSION");
+        }
+        if win_target() && cfg!(feature = "winsqlite3") {
+            bindings = bindings
+                .override_abi(bindgen::Abi::System, ".*")
+                .clang_arg("-DBINDGEN_USE_WINSQLITE3")
+                .blocklist_item("NTDDI_.+")
+                .blocklist_item("WINAPI_FAMILY.*")
+                .blocklist_item("_WIN32_.+")
+                .blocklist_item("_VCRT_COMPILER_PREPROCESSOR")
+                .blocklist_item("_SAL_VERSION")
+                .blocklist_item("__SAL_H_VERSION")
+                .blocklist_item("_USE_DECLSPECS_FOR_SAL")
+                .blocklist_item("_USE_ATTRIBUTES_FOR_SAL")
+                .blocklist_item("_CRT_PACKING")
+                .blocklist_item("_HAS_EXCEPTIONS")
+                .blocklist_item("_STL_LANG")
+                .blocklist_item("_HAS_CXX17")
+                .blocklist_item("_HAS_CXX20")
+                .blocklist_item("_HAS_NODISCARD")
+                .blocklist_item("WDK_NTDDI_VERSION")
+                .blocklist_item("OSVERSION_MASK")
+                .blocklist_item("SPVERSION_MASK")
+                .blocklist_item("SUBVERSION_MASK")
+                .blocklist_item("WINVER")
+                .blocklist_item("__security_cookie")
+                .blocklist_type("size_t")
+                .blocklist_type("__vcrt_bool")
+                .blocklist_type("wchar_t")
+                .blocklist_function("__security_init_cookie")
+                .blocklist_function("__report_gsfailure")
+                .blocklist_function("__va_start");
         }
 
         // When cross compiling unless effort is taken to fix the issue, bindgen
@@ -638,10 +680,63 @@ mod bindings {
             std::fs::write(out_path, output.as_bytes())
                 .unwrap_or_else(|_| panic!("Could not write to {:?}", out_path));
         }
+        #[cfg(feature = "loadable_extension")]
+        {
+            let mut output = Vec::new();
+            bindings
+                .write(Box::new(&mut output))
+                .expect("could not write output of bindgen");
+            let mut output = String::from_utf8(output).expect("bindgen output was not UTF-8?!");
+            super::loadable_extension::generate_functions(&mut output);
+            std::fs::write(out_path, output.as_bytes())
+                .unwrap_or_else(|_| panic!("Could not write to {:?}", out_path));
+        }
         #[cfg(not(feature = "loadable_extension"))]
-        bindings
-            .write_to_file(out_path)
-            .unwrap_or_else(|_| panic!("Could not write to {:?}", out_path));
+        {
+            let should_fix_winsqlite_varadic;
+            #[cfg(feature = "winsqlite3")]
+            {
+                should_fix_winsqlite_varadic = win_target();
+            }
+            #[cfg(not(feature = "winsqlite3"))]
+            {
+                should_fix_winsqlite_varadic = false;
+            }
+            if should_fix_winsqlite_varadic {
+                let mut output = Vec::new();
+                bindings
+                    .write(Box::new(&mut output))
+                    .expect("could not write output of bindgen");
+                let mut output = String::from_utf8(output).expect("bindgen output was not UTF-8?!");
+                fix_winsqlite_varadic(&mut output);
+                std::fs::write(out_path, output.as_bytes())
+                    .unwrap_or_else(|_| panic!("Could not write to {:?}", out_path));
+            } else {
+                bindings
+                    .write_to_file(out_path)
+                    .unwrap_or_else(|_| panic!("Could not write to {:?}", out_path));
+            }
+        }
+    }
+
+    fn fix_winsqlite_varadic(output: &mut String) {
+        let mut ast: syn::File = syn::parse_str(output).expect("could not parse bindgen output");
+        ast.items
+            .iter_mut()
+            .filter_map(|i| {
+                if let syn::Item::ForeignMod(f) = i {
+                    Some(f)
+                } else {
+                    None
+                }
+            })
+            .filter(|i| {
+                i.items
+                    .iter()
+                    .any(|i| matches!(i, syn::ForeignItem::Fn(f) if f.sig.variadic.is_some()))
+            })
+            .for_each(|f| f.abi.name = Some(syn::parse_quote!("C")));
+        *output = prettyplease::unparse(&ast);
     }
 }
 
@@ -744,7 +839,7 @@ mod loadable_extension {
                     pub unsafe fn #sqlite3_fn_name(#args) #ty {
                         let ptr = #ptr_name.load(::std::sync::atomic::Ordering::Acquire);
                         assert!(!ptr.is_null(), "SQLite API not initialized or SQLite feature omitted");
-                        let fun: unsafe extern "C" fn(#args #varargs) #ty = ::std::mem::transmute(ptr);
+                        let fun: unsafe extern "system" fn(#args #varargs) #ty = ::std::mem::transmute(ptr);
                         (fun)(#arg_names)
                     }
                 }

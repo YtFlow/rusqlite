@@ -84,7 +84,7 @@ unsafe fn report_error(ctx: *mut sqlite3_context, err: &Error) {
     }
 }
 
-unsafe extern "C" fn free_boxed_value<T>(p: *mut c_void) {
+unsafe extern "system" fn free_boxed_value<T>(p: *mut c_void) {
     drop(Box::from_raw(p.cast::<T>()));
 }
 
@@ -550,7 +550,7 @@ impl InnerConnection {
         F: FnMut(&Context<'_>) -> Result<T> + Send + 'static,
         T: SqlFnOutput,
     {
-        unsafe extern "C" fn call_boxed_closure<F, T>(
+        unsafe extern "system" fn call_boxed_closure<F, T>(
             ctx: *mut sqlite3_context,
             argc: c_int,
             argv: *mut *mut sqlite3_value,
@@ -682,7 +682,7 @@ unsafe fn aggregate_context<A>(ctx: *mut sqlite3_context, bytes: usize) -> Optio
     Some(pac)
 }
 
-unsafe extern "C" fn call_boxed_step<A, D, T>(
+unsafe extern "system" fn call_boxed_step<A, D, T>(
     ctx: *mut sqlite3_context,
     argc: c_int,
     argv: *mut *mut sqlite3_value,
@@ -730,7 +730,7 @@ unsafe extern "C" fn call_boxed_step<A, D, T>(
 }
 
 #[cfg(feature = "window")]
-unsafe extern "C" fn call_boxed_inverse<A, W, T>(
+unsafe extern "system" fn call_boxed_inverse<A, W, T>(
     ctx: *mut sqlite3_context,
     argc: c_int,
     argv: *mut *mut sqlite3_value,
@@ -771,7 +771,7 @@ unsafe extern "C" fn call_boxed_inverse<A, W, T>(
     };
 }
 
-unsafe extern "C" fn call_boxed_final<A, D, T>(ctx: *mut sqlite3_context)
+unsafe extern "system" fn call_boxed_final<A, D, T>(ctx: *mut sqlite3_context)
 where
     A: RefUnwindSafe + UnwindSafe,
     D: Aggregate<A, T>,
@@ -813,7 +813,7 @@ where
 }
 
 #[cfg(feature = "window")]
-unsafe extern "C" fn call_boxed_value<A, W, T>(ctx: *mut sqlite3_context)
+unsafe extern "system" fn call_boxed_value<A, W, T>(ctx: *mut sqlite3_context)
 where
     A: RefUnwindSafe + UnwindSafe,
     W: WindowAggregate<A, T>,

@@ -9,7 +9,7 @@ use crate::ffi;
 use crate::{str_to_cstring, Connection, InnerConnection, Result};
 
 // FIXME copy/paste from function.rs
-unsafe extern "C" fn free_boxed_value<T>(p: *mut c_void) {
+unsafe extern "system" fn free_boxed_value<T>(p: *mut c_void) {
     drop(Box::from_raw(p.cast::<T>()));
 }
 
@@ -68,7 +68,7 @@ impl InnerConnection {
     where
         C: Fn(&str, &str) -> Ordering + Send + 'static,
     {
-        unsafe extern "C" fn call_boxed_closure<C>(
+        unsafe extern "system" fn call_boxed_closure<C>(
             arg1: *mut c_void,
             arg2: c_int,
             arg3: *const c_void,
@@ -133,7 +133,7 @@ impl InnerConnection {
     ) -> Result<()> {
         use std::mem;
         #[allow(clippy::needless_return)]
-        unsafe extern "C" fn collation_needed_callback(
+        unsafe extern "system" fn collation_needed_callback(
             arg1: *mut c_void,
             arg2: *mut ffi::sqlite3,
             e_text_rep: c_int,

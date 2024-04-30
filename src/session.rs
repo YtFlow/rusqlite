@@ -61,7 +61,7 @@ impl Session<'_> {
     where
         F: Fn(&str) -> bool + Send + 'static,
     {
-        unsafe extern "C" fn call_boxed_closure<F>(
+        unsafe extern "system" fn call_boxed_closure<F>(
             p_arg: *mut c_void,
             tbl_str: *const c_char,
         ) -> c_int
@@ -701,7 +701,7 @@ pub enum ConflictAction {
     SQLITE_CHANGESET_ABORT = ffi::SQLITE_CHANGESET_ABORT,
 }
 
-unsafe extern "C" fn call_filter<F, C>(p_ctx: *mut c_void, tbl_str: *const c_char) -> c_int
+unsafe extern "system" fn call_filter<F, C>(p_ctx: *mut c_void, tbl_str: *const c_char) -> c_int
 where
     F: Fn(&str) -> bool + Send + 'static,
     C: Fn(ConflictType, ChangesetItem) -> ConflictAction + Send + 'static,
@@ -720,7 +720,7 @@ where
     )
 }
 
-unsafe extern "C" fn call_conflict<F, C>(
+unsafe extern "system" fn call_conflict<F, C>(
     p_ctx: *mut c_void,
     e_conflict: c_int,
     p: *mut ffi::sqlite3_changeset_iter,
@@ -741,7 +741,7 @@ where
     }
 }
 
-unsafe extern "C" fn x_input(p_in: *mut c_void, data: *mut c_void, len: *mut c_int) -> c_int {
+unsafe extern "system" fn x_input(p_in: *mut c_void, data: *mut c_void, len: *mut c_int) -> c_int {
     if p_in.is_null() {
         return ffi::SQLITE_MISUSE;
     }
@@ -757,7 +757,7 @@ unsafe extern "C" fn x_input(p_in: *mut c_void, data: *mut c_void, len: *mut c_i
     }
 }
 
-unsafe extern "C" fn x_output(p_out: *mut c_void, data: *const c_void, len: c_int) -> c_int {
+unsafe extern "system" fn x_output(p_out: *mut c_void, data: *const c_void, len: c_int) -> c_int {
     if p_out.is_null() {
         return ffi::SQLITE_MISUSE;
     }

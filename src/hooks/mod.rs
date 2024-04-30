@@ -445,7 +445,7 @@ impl InnerConnection {
     where
         F: FnMut() -> bool + Send + 'static,
     {
-        unsafe extern "C" fn call_boxed_closure<F>(p_arg: *mut c_void) -> c_int
+        unsafe extern "system" fn call_boxed_closure<F>(p_arg: *mut c_void) -> c_int
         where
             F: FnMut() -> bool,
         {
@@ -510,7 +510,7 @@ impl InnerConnection {
     where
         F: FnMut() + Send + 'static,
     {
-        unsafe extern "C" fn call_boxed_closure<F>(p_arg: *mut c_void)
+        unsafe extern "system" fn call_boxed_closure<F>(p_arg: *mut c_void)
         where
             F: FnMut(),
         {
@@ -564,7 +564,7 @@ impl InnerConnection {
     where
         F: FnMut(Action, &str, &str, i64) + Send + 'static,
     {
-        unsafe extern "C" fn call_boxed_closure<F>(
+        unsafe extern "system" fn call_boxed_closure<F>(
             p_arg: *mut c_void,
             action_code: c_int,
             p_db_name: *const c_char,
@@ -636,7 +636,7 @@ impl InnerConnection {
     where
         F: FnMut() -> bool + Send + 'static,
     {
-        unsafe extern "C" fn call_boxed_closure<F>(p_arg: *mut c_void) -> c_int
+        unsafe extern "system" fn call_boxed_closure<F>(p_arg: *mut c_void) -> c_int
         where
             F: FnMut() -> bool,
         {
@@ -685,7 +685,7 @@ impl InnerConnection {
     where
         F: for<'r> FnMut(AuthContext<'r>) -> Authorization + Send + 'static,
     {
-        unsafe extern "C" fn call_boxed_closure<'c, F>(
+        unsafe extern "system" fn call_boxed_closure<'c, F>(
             p_arg: *mut c_void,
             action_code: c_int,
             param1: *const c_char,
@@ -718,7 +718,7 @@ impl InnerConnection {
 
         let callback_fn = authorizer
             .as_ref()
-            .map(|_| call_boxed_closure::<'c, F> as unsafe extern "C" fn(_, _, _, _, _, _) -> _);
+            .map(|_| call_boxed_closure::<'c, F> as unsafe extern "system" fn(_, _, _, _, _, _) -> _);
         let boxed_authorizer = authorizer.map(Box::new);
 
         match unsafe {

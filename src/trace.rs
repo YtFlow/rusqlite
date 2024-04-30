@@ -26,7 +26,7 @@ use crate::Connection;
 /// cf [The Error And Warning Log](http://sqlite.org/errlog.html).
 #[cfg(not(feature = "loadable_extension"))]
 pub unsafe fn config_log(callback: Option<fn(c_int, &str)>) -> crate::Result<()> {
-    extern "C" fn log_callback(p_arg: *mut c_void, err: c_int, msg: *const c_char) {
+    extern "system" fn log_callback(p_arg: *mut c_void, err: c_int, msg: *const c_char) {
         let s = unsafe { CStr::from_ptr(msg).to_string_lossy() };
         let callback: fn(c_int, &str) = unsafe { mem::transmute(p_arg) };
 
@@ -36,7 +36,7 @@ pub unsafe fn config_log(callback: Option<fn(c_int, &str)>) -> crate::Result<()>
     let rc = if let Some(f) = callback {
         ffi::sqlite3_config(
             ffi::SQLITE_CONFIG_LOG,
-            log_callback as extern "C" fn(_, _, _),
+            log_callback as extern "system" fn(_, _, _),
             f as *mut c_void,
         )
     } else {
@@ -69,7 +69,7 @@ impl Connection {
     /// values. There can only be a single tracer defined for each database
     /// connection. Setting a new tracer clears the old one.
     pub fn trace(&mut self, trace_fn: Option<fn(&str)>) {
-        unsafe extern "C" fn trace_callback(p_arg: *mut c_void, z_sql: *const c_char) {
+        unsafe extern "system" fn trace_callback(p_arg: *mut c_void, z_sql: *const c_char) {
             let trace_fn: fn(&str) = mem::transmute(p_arg);
             let s = CStr::from_ptr(z_sql).to_string_lossy();
             drop(catch_unwind(|| trace_fn(&s)));
@@ -92,7 +92,7 @@ impl Connection {
     /// There can only be a single profiler defined for each database
     /// connection. Setting a new profiler clears the old one.
     pub fn profile(&mut self, profile_fn: Option<fn(&str, Duration)>) {
-        unsafe extern "C" fn profile_callback(
+        unsafe extern "system" fn profile_callback(
             p_arg: *mut c_void,
             z_sql: *const c_char,
             nanoseconds: u64,
